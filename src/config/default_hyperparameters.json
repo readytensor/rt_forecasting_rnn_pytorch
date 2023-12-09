@@ -1,0 +1,9 @@
+{
+  "encode_to_decode_ratio": 4.0,
+  "use_exogenous": true,
+  "n_rnnlayers": 3,
+  "rnn_unit": "gru",
+  "latent_dim": 50,
+  "activation": "tanh",
+  "bidirectional": true
+}
