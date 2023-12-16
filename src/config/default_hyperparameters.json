@@ -3,7 +3,7 @@
   "use_exogenous": true,
   "n_rnnlayers": 3,
   "rnn_unit": "gru",
-  "latent_dim": 50,
+  "latent_dim": 40,
   "activation": "tanh",
   "bidirectional": true
 }
