@@ -315,10 +315,6 @@ class Forecaster:
         preds = np.concatenate(all_preds, axis=0)
         preds = np.expand_dims(preds, axis=-1)
         return preds
-
-    def summary(self):
-        self.model.summary()
-        
     
     def evaluate(self, test_data):
         """Evaluate the model and return the loss and metrics"""
