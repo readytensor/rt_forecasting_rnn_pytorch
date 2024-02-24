@@ -13,8 +13,6 @@ RUN apt-get update && apt-get install -y python3.9 python3-pip
 RUN ln -sf /usr/bin/python3.9 /usr/bin/python
 RUN ln -sf /usr/bin/python3.9 /usr/bin/python3
 
-
-
 COPY ./requirements.txt /opt/
 RUN python3.9 -m pip install --upgrade pip
 RUN python3.9 -m pip install --no-cache-dir -r /opt/requirements.txt
