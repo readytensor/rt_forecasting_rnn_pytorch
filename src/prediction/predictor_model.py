@@ -118,8 +118,9 @@ class Net(Module):
             ).to(device)
             return h0
         else:
-            raise Exception(
-                f"Unrecognized rnn unit {self.rnn_unit}. Must be one of [ 'lstm', 'gru', 'simple']"
+            raise ValueError(
+                f"Unrecognized rnn unit {self.rnn_unit}. "
+                f"Must be one of [ 'lstm', 'gru', 'simple']"
             )
 
     def _get_rnn_unit(self):
@@ -130,8 +131,9 @@ class Net(Module):
         elif self.rnn_unit == "simple":
             return RNN
         else:
-            raise Exception(
-                f"Unrecognized rnn unit {self.rnn_unit}. Must be one of [ 'lstm', 'gru', 'simple']"
+            raise ValueError(
+                f"Unrecognized rnn unit {self.rnn_unit}. "
+                "Must be one of [ 'lstm', 'gru', 'simple']"
             )
 
     def get_num_parameters(self):
@@ -150,18 +152,19 @@ class Net(Module):
             return Tanh()
         else:
             raise ValueError(
-                f"Activation {self.activation} is unrecognized. Must be either 'tanh' or 'relu'."
+                f"Activation {self.activation} is unrecognized. "
+                f"Must be either 'tanh' or 'relu'."
             )
 
 
 class Forecaster:
-    """CNN Timeseries Forecaster.
+    """RNN Timeseries Forecaster.
 
     This class provides a consistent interface that can be used with other
     Forecaster models.
     """
 
-    MODEL_NAME = "CNN_Timeseries_Forecaster"
+    MODEL_NAME = "RNN_Timeseries_Forecaster"
 
     def __init__(
         self,
@@ -175,7 +178,7 @@ class Forecaster:
         bidirectional: bool,
         **kwargs,
     ):
-        """Construct a new CNN Forecaster."""
+        """Construct a new RNN Forecaster."""
         self.encode_len = encode_len
         self.decode_len = decode_len
         self.feat_dim = feat_dim
@@ -470,23 +473,3 @@ def evaluate_predictor_model(
     """
     return model.evaluate(x_test, y_test)
 
-
-if __name__ == "__main__":
-
-    N = 100
-    T = 25
-    D = 3
-
-    model = Net(
-        feat_dim=D,
-        latent_dim=13,
-        n_cnnlayers=2,
-        decode_len=10,
-        activation="relu",
-    )
-    model.to(device=device)
-
-    X = torch.from_numpy(np.random.randn(N, T, D).astype(np.float32)).to(device)
-
-    preds = model(X)
-    print(preds.shape)

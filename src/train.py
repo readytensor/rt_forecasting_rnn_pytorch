@@ -104,7 +104,7 @@ def run_training(
             trained_pipeline, transformed_data = fit_transform_with_pipeline(
                 training_pipeline, validated_data
             )
-            logger.info("Transformed training data shape:", transformed_data.shape)
+            logger.info("Transformed training data shape: {transformed_data.shape}")
 
             # perform train/valid split
             logger.info("Splitting train and validation data...")
