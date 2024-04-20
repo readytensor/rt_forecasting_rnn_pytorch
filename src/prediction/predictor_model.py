@@ -11,7 +11,8 @@ warnings.filterwarnings("ignore")
 
 import torch
 import torch.optim as optim
-from torch.nn import GRU, LSTM, RNN, ReLU, Linear, Module, MSELoss, Tanh
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.nn import GRU, LSTM, RNN, ReLU, Linear, Module, MSELoss, Tanh, Flatten
 from torch.utils.data import Dataset, DataLoader
 
 # Check for GPU availability
@@ -30,7 +31,7 @@ def get_patience_factor(N):
     # magic number - just picked through trial and error
     if N < 100:
         return 30
-    patience = max(3, int(50 - math.log(N, 1.25)))
+    patience = max(3, int(60 - math.log(N, 1.25)))
     return patience
 
 
@@ -67,6 +68,7 @@ class Net(Module):
         feat_dim,
         latent_dim,
         n_rnnlayers,
+        encode_len,
         decode_len,
         activation,
         rnn_unit,
@@ -76,6 +78,7 @@ class Net(Module):
         self.feat_dim = feat_dim
         self.latent_dim = latent_dim
         self.n_rnnlayers = n_rnnlayers
+        self.encode_len = encode_len
         self.decode_len = decode_len
         self.activation = activation
         self.rnn_unit = rnn_unit.lower()
@@ -90,17 +93,20 @@ class Net(Module):
             bidirectional=bool(self.bidirectional),
             batch_first=True,
         )
-        self.relu_layer = self.get_activation()
-        self.fc = Linear(self.num_directions * self.latent_dim, 1)
+        self.flatten = Flatten()
+        self.activation = self.get_activation()
+        self.fc = Linear(
+            self.decode_len * self.latent_dim * self.num_directions,
+            self.decode_len
+        )
 
     def forward(self, X):
-        # initial hidden states
         initial_state = self._get_hidden_initial_state(X)
         x, _ = self.rnn(X, initial_state)
-        x = x[:, -self.decode_len :, :]
-        x = self.relu_layer(x)
+        x = x[:, -self.decode_len:, :]
+        x = self.flatten(x)
+        x = self.activation(x)
         x = self.fc(x)
-        x = torch.squeeze(x, dim=-1)
         return x
 
     def _get_hidden_initial_state(self, X):
@@ -188,20 +194,20 @@ class Forecaster:
         self.activation = activation
         self.bidirectional = bidirectional
         self.batch_size = None  # calculated based on size of train data
-
         self.net = Net(
             feat_dim=self.feat_dim,
             latent_dim=self.latent_dim,
             n_rnnlayers=self.n_rnnlayers,
+            encode_len=self.encode_len,
             decode_len=self.decode_len,
             activation=self.activation,
             rnn_unit=self.rnn_unit,
             bidirectional=self.bidirectional,
         )
         self.net.to(device)
-        # print(self.net.get_num_parameters()) ; sys.exit()
         self.criterion = MSELoss()
-        self.optimizer = optim.Adam(self.net.parameters())
+        self.optimizer = optim.Adam(self.net.parameters(), lr=1e-3)
+        self.scheduler = None #set later
         self.print_period = 1
 
     def _get_X_and_y(self, data: np.ndarray, is_train: bool = True) -> np.ndarray:
@@ -209,32 +215,11 @@ class Forecaster:
         When is_train is True, data contains both history and forecast windows.
         When False, only history is contained.
         """
-        N, T, D = data.shape
-        if D != self.feat_dim:
-            raise ValueError(
-                f"Training data expected to have {self.feat_dim} feature dim. "
-                f"Found {D}"
-            )
         if is_train:
-            if T != self.encode_len + self.decode_len:
-                raise ValueError(
-                    f"Training data expected to have {self.encode_len + self.decode_len}"
-                    f" length on axis 1. Found length {T}"
-                )
-            X = data[:, : self.encode_len, :]
-            y = data[:, self.encode_len :, 0]
-        else:
-            # for inference
-            if T < self.encode_len:
-                raise ValueError(
-                    f"Inference data length expected to be >= {self.encode_len}"
-                    f" on axis 1. Found length {T}"
-                )
-            X = data[:, -self.encode_len :, :]
-            y = None
-        return X, y
+            return data[:, : self.encode_len, :], data[:, self.encode_len :, 0]
+        return data[:, -self.encode_len :, :], None
 
-    def fit(self, train_data, valid_data, max_epochs=250, verbose=1):
+    def fit(self, train_data, valid_data, max_epochs=500, verbose=1):
         train_X, train_y = self._get_X_and_y(train_data, is_train=True)
         if valid_data is not None:
             valid_X, valid_y = self._get_X_and_y(valid_data, is_train=True)
@@ -246,6 +231,10 @@ class Forecaster:
 
         patience = get_patience_factor(train_X.shape[0])
         print(f"{patience=}")
+
+        self.scheduler = ReduceLROnPlateau(
+            self.optimizer, mode='min', factor=0.7,
+            patience=patience//2, verbose=True)
 
         train_X, train_y = torch.FloatTensor(train_X), torch.FloatTensor(train_y)
         train_dataset = CustomDataset(train_X, train_y)
@@ -300,8 +289,8 @@ class Forecaster:
                 # Weight Update: w <-- w - lr * gradient
                 self.optimizer.step()
 
-            current_loss = loss.item()
-
+            current_loss = loss.item()            
+            # self.scheduler.step(loss)
             if use_early_stopping:
                 # Early stopping
                 if valid_loader is not None:
@@ -472,4 +461,34 @@ def evaluate_predictor_model(
         float: The accuracy of the Forecaster model.
     """
     return model.evaluate(x_test, y_test)
+
+
+if __name__ == "__main__":
+
+    N = 64
+    T = 90
+    D = 1
+    encode_len = 72
+    decode_len = T - encode_len
+
+    model = Net(
+        encode_len=encode_len,
+        decode_len=decode_len,
+        feat_dim=D,
+        latent_dim=50,
+        activation="tanh",
+        rnn_unit="gru",
+        n_rnnlayers=2,
+        bidirectional=True
+    )
+    model.to(device=device)
+
+    X = torch.from_numpy(
+        np.random.randn(N, encode_len, D).astype(np.float32)
+    ).to(device)
+
+    print(model)
+
+    preds = model(X).cpu().detach().numpy()
+    print("output", preds.shape)
 

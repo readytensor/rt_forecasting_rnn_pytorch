@@ -1,11 +1,11 @@
 {
   "encode_to_decode_ratio": 4.0,
   "min_windows": 25,
-  "min_encode_len_ratio": 0.4,
+  "min_encode_len_ratio": 1.0,
   "use_exogenous": true,
-  "n_rnnlayers": 3,
+  "n_rnnlayers": 2,
   "rnn_unit": "gru",
-  "latent_dim": 40,
+  "latent_dim": 50,
   "activation": "tanh",
   "bidirectional": true
 }
